@@ -1,35 +1,60 @@
 import type {
   DetectionResult,
-  DetectionSummary,
+  ImageDetectionApiResponse,
+  ImageDetectionResponse,
 } from "../types/imageDetection";
 
-const mockResults: DetectionResult[] = [
-  {
-    objectName: "Person",
-    confidence: 98.2,
-    boundingBox: { x: 84, y: 102, width: 180, height: 432 },
-  },
-  {
-    objectName: "Bicycle",
-    confidence: 93.7,
-    boundingBox: { x: 382, y: 120, width: 150, height: 112 },
-  },
-  {
-    objectName: "Backpack",
-    confidence: 91.1,
-    boundingBox: { x: 178, y: 384, width: 96, height: 134 },
-  },
-];
+const API_BASE_URL = "http://127.0.0.1:8000";
 
-const mockSummary: DetectionSummary = {
-  totalObjects: 12,
-  averageConfidence: 94.3,
+const emptyBoundingBox = {
+  x: 0,
+  y: 0,
+  width: 0,
+  height: 0,
 };
 
 export const fetchDetectionResults = async (
   file: File,
-): Promise<{ summary: DetectionSummary; results: DetectionResult[] }> => {
-  // Placeholder for backend API integration
-  await new Promise((resolve) => setTimeout(resolve, 900));
-  return { summary: mockSummary, results: mockResults };
+): Promise<ImageDetectionResponse> => {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch(`${API_BASE_URL}/api/detection/image`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      errorText || "Unable to fetch detection results. Please try again.",
+    );
+  }
+
+  const data: ImageDetectionApiResponse = await response.json();
+
+  const results: DetectionResult[] = data.detections.map((detection) => ({
+    objectName: detection.class,
+    confidence: Number((detection.confidence * 100).toFixed(1)),
+    boundingBox: { ...emptyBoundingBox },
+  }));
+
+  const totalObjects = results.length;
+  const averageConfidence =
+    totalObjects > 0
+      ? Number(
+          (
+            results.reduce((sum, result) => sum + result.confidence, 0) /
+            totalObjects
+          ).toFixed(1),
+        )
+      : 0;
+
+  return {
+    summary: {
+      totalObjects,
+      averageConfidence,
+    },
+    results,
+  };
 };
